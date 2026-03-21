@@ -2,9 +2,9 @@
   "name": "schoolmanagement-gh",
   "version": "1.0.0",
   "description": "SchoolManagement GH — Multi-tenant School Fees Platform",
-  "main": "src/index.js",
+  "main": "index.js"
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node index.js"
     "dev": "nodemon src/index.js"
   },
   "dependencies": {
