@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+xconst mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 // ── School (tenant) ───────────────────────────────────────────
