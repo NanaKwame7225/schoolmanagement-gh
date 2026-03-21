@@ -1,6 +1,6 @@
 const router = require('express').Router();
-const { requireSchoolAuth } = require('../middleware/auth');
-const { Student, Payment, Staff, Settings, Audit } = require('../models');
+const { requireSchoolAuth } = require('./middleware_auth');
+const { Student, Payment, Staff, Settings, Audit } = require('./models_index');
 
 // All routes require school auth — schoolId comes from JWT
 const sid = req => req.user.schoolId;
@@ -138,7 +138,7 @@ router.post('/sms/send', requireSchoolAuth, async (req, res) => {
 // ── School info (for subscription status) ─────────────────────
 router.get('/school-info', requireSchoolAuth, async (req, res) => {
   try {
-    const { School } = require('../models');
+    const { School } = require('./models_index');
     const school = await School.findById(sid(req));
     if (!school) return res.status(404).json({ error: 'Not found' });
     res.json({ name: school.name, slug: school.slug, plan: school.plan, planExpiry: school.planExpiry, active: school.active });
