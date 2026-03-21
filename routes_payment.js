@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const https  = require('https');
-const { School, Subscription } = require('../models');
+const { School, Subscription } = require('./models_index');
 
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
 
