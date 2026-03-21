@@ -1,8 +1,8 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { School, User, Settings, Audit } = require('../models');
-const { requireSchoolAuth, requireMaster } = require('../middleware/auth');
+const { School, User, Settings, Audit } = require('./models_index');
+const { requireSchoolAuth, requireMaster } = require('./middleware_auth');
 
 // Middleware to check school exists, is active and subscription valid
 async function checkSchool(req, res, next) {
