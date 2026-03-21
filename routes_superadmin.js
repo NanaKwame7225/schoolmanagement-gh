@@ -1,8 +1,8 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { SuperAdmin, School, User, Settings, Subscription } = require('../models');
-const { requireSuperAdmin } = require('../middleware/auth');
+const { SuperAdmin, School, User, Settings, Subscription } = require('./models_index');
+const { requireSuperAdmin } = require('./middleware_auth');
 
 // POST /api/super/login
 router.post('/login', async (req, res) => {
