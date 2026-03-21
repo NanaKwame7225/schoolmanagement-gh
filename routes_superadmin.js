@@ -4,11 +4,24 @@ const jwt = require('jsonwebtoken');
 const { SuperAdmin, School, User, Settings, Subscription } = require('./models_index');
 const { requireSuperAdmin } = require('./middleware_auth');
 
+// POST /api/super/setup — one time setup (creates super admin if none exists)
+router.post('/setup', async (req, res) => {
+  try {
+    const count = await SuperAdmin.countDocuments();
+    if (count > 0) return res.status(403).json({ error: 'Setup already done' });
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+    const hash = await bcrypt.hash(password, 10);
+    await SuperAdmin.create({ username: username.toUpperCase(), password: hash });
+    res.json({ success: true, message: 'Super admin created. Login: ' + username.toUpperCase() });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/super/login
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    const admin = await SuperAdmin.findOne({ username });
+    const admin = await SuperAdmin.findOne({ username: username?.toUpperCase() });
     if (!admin) return res.status(401).json({ error: 'Invalid credentials' });
     const ok = await bcrypt.compare(password, admin.password);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
@@ -25,24 +38,17 @@ router.get('/schools', requireSuperAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/super/schools — add a new school
+// POST /api/super/schools
 router.post('/schools', requireSuperAdmin, async (req, res) => {
   try {
     const { name, slug, plan, expiryDays, adminPassword, phone, email, address } = req.body;
     if (!name || !slug || !adminPassword) return res.status(400).json({ error: 'name, slug and adminPassword required' });
-
-    // Create school
     const expiry = new Date(Date.now() + (expiryDays || 30) * 24 * 60 * 60 * 1000);
     const school = await School.create({ name, slug: slug.toLowerCase(), plan: plan || 'trial', planExpiry: expiry, phone, email, address });
-
-    // Create school settings
     await Settings.create({ schoolId: school._id, schoolName: name, phone, email, address });
-
-    // Create master admin for the school
     const hash = await bcrypt.hash(adminPassword, 10);
     await User.create({ schoolId: school._id, username: 'ADMIN', password: hash, displayName: 'Master Admin', role: 'master' });
-
-    res.status(201).json({ school, message: `School created. Login: ADMIN / ${adminPassword}` });
+    res.status(201).json({ school, message: 'School created. Login: ADMIN / ' + adminPassword });
   } catch(e) {
     if (e.code === 11000) return res.status(409).json({ error: 'School slug already exists' });
     res.status(500).json({ error: e.message });
@@ -80,7 +86,7 @@ router.get('/stats', requireSuperAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/super/schools/:slug/extend — manually extend subscription
+// POST /api/super/schools/:slug/extend
 router.post('/schools/:slug/extend', requireSuperAdmin, async (req, res) => {
   try {
     const { months, plan } = req.body;
@@ -91,7 +97,7 @@ router.post('/schools/:slug/extend', requireSuperAdmin, async (req, res) => {
     if (plan) school.plan = plan;
     school.active = true;
     await school.save();
-    res.json({ school, message: `Subscription extended by ${months || 1} month(s)` });
+    res.json({ school, message: 'Subscription extended by ' + (months || 1) + ' month(s)' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
