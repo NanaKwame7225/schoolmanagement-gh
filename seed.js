@@ -1,7 +1,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt   = require('bcryptjs');
-const { SuperAdmin, School, User, Settings } = require('./models');
+const { SuperAdmin, School, User, Settings } = require('./models_index');
 
 async function seed() {
   await mongoose.connect(process.env.MONGODB_URI);
