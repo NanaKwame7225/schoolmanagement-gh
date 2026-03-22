@@ -64,13 +64,25 @@ router.patch('/schools/:slug', requireSuperAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// DELETE /api/super/schools/:slug
+// DELETE /api/super/schools/:slug — deletes school and ALL its data
 router.delete('/schools/:slug', requireSuperAdmin, async (req, res) => {
   try {
+    const { Student, Payment, Staff, Settings, User, Audit, Subscription } = require('./models_index');
     const school = await School.findOne({ slug: req.params.slug });
     if (!school) return res.status(404).json({ error: 'School not found' });
+    const id = school._id;
+    // Delete all school data
+    await Promise.all([
+      Student.deleteMany({ schoolId: id }),
+      Payment.deleteMany({ schoolId: id }),
+      Staff.deleteMany({ schoolId: id }),
+      Settings.deleteMany({ schoolId: id }),
+      User.deleteMany({ schoolId: id }),
+      Audit.deleteMany({ schoolId: id }),
+      Subscription.deleteMany({ schoolId: id }),
+    ]);
     await school.deleteOne();
-    res.json({ success: true });
+    res.json({ success: true, message: 'School and all data deleted permanently' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
