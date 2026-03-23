@@ -41,13 +41,26 @@ router.get('/schools', requireSuperAdmin, async (req, res) => {
 // POST /api/super/schools
 router.post('/schools', requireSuperAdmin, async (req, res) => {
   try {
-    const { name, slug, plan, expiryDays, adminPassword, phone, email, address } = req.body;
+    const { name, slug, plan, expiryDays, adminPassword, phone, email, address, mnotifyKey, mnotifySender } = req.body;
     if (!name || !slug || !adminPassword) return res.status(400).json({ error: 'name, slug and adminPassword required' });
     const expiry = new Date(Date.now() + (expiryDays || 30) * 24 * 60 * 60 * 1000);
     const school = await School.create({ name, slug: slug.toLowerCase(), plan: plan || 'trial', planExpiry: expiry, phone, email, address });
-    await Settings.create({ schoolId: school._id, schoolName: name, phone, email, address });
+    // Save school settings including their own BMS credentials
+    await Settings.create({
+      schoolId: school._id, schoolName: name, phone, email, address,
+      mnotifyKey: mnotifyKey || '',
+      mnotifySender: mnotifySender || slug.toUpperCase().slice(0, 11)
+    });
     const hash = await bcrypt.hash(adminPassword, 10);
     await User.create({ schoolId: school._id, username: 'ADMIN', password: hash, displayName: 'Master Admin', role: 'master' });
+    // Save mnotify settings if provided
+    if (mnotifyKey || mnotifySender) {
+      await Settings.findOneAndUpdate(
+        { schoolId: school._id },
+        { mnotifyKey: mnotifyKey || '', mnotifySender: mnotifySender || 'SMS' },
+        { new: true }
+      );
+    }
     res.status(201).json({ school, message: 'School created. Login: ADMIN / ' + adminPassword });
   } catch(e) {
     if (e.code === 11000) return res.status(409).json({ error: 'School slug already exists' });
@@ -95,6 +108,17 @@ router.get('/stats', requireSuperAdmin, async (req, res) => {
     const payments = await Subscription.find({ status: 'success' });
     const totalRevenue = payments.reduce((a, p) => a + p.amount, 0);
     res.json({ totalSchools, activeSchools, expiredSchools, totalRevenue });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/super/schools/:slug/audit — view school audit log
+router.get('/schools/:slug/audit', requireSuperAdmin, async (req, res) => {
+  try {
+    const { Audit } = require('./models_index');
+    const school = await School.findOne({ slug: req.params.slug });
+    if (!school) return res.status(404).json({ error: 'School not found' });
+    const logs = await Audit.find({ schoolId: school._id }).sort({ createdAt: -1 }).limit(500);
+    res.json(logs);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
