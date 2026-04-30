@@ -316,4 +316,58 @@ router.get('/documents/student/:studentId', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Bulk Sync Routes — frontend pushes full arrays ───────────
+// POST /api/school/sync/:collection
+router.post('/sync/:collection', requireSchoolAuth, async (req, res) => {
+  try {
+    const col = req.params.collection;
+    const data = req.body.data;
+    if (!Array.isArray(data)) return res.status(400).json({ error: 'data must be an array' });
+
+    const allowed = ['students','payments','staff','settings','audit','levies','levypayments','levytypes'];
+    if (!allowed.includes(col)) return res.status(400).json({ error: 'Unknown collection: '+col });
+
+    const schoolId = sid(req);
+
+    if (col === 'students') {
+      await Student.deleteMany({ schoolId });
+      if (data.length) await Student.insertMany(data.map(function(s){ return {...s, schoolId, _id: undefined}; }));
+    }
+    else if (col === 'payments') {
+      await Payment.deleteMany({ schoolId });
+      if (data.length) await Payment.insertMany(data.map(function(p){ return {...p, schoolId, _id: undefined}; }));
+    }
+    else if (col === 'staff') {
+      await Staff.deleteMany({ schoolId });
+      if (data.length) await Staff.insertMany(data.map(function(s){ return {...s, schoolId, _id: undefined}; }));
+    }
+    else if (col === 'settings') {
+      const s = data[0] || data;
+      await Settings.findOneAndUpdate({ schoolId }, s, { upsert: true, new: true });
+    }
+    else if (col === 'audit') {
+      // Only insert new records not already in DB
+      await Audit.deleteMany({ schoolId });
+      if (data.length) await Audit.insertMany(data.map(function(a){ return {...a, schoolId, _id: undefined}; }));
+    }
+    else if (col === 'levytypes') {
+      await LevyType.deleteMany({ schoolId });
+      if (data.length) await LevyType.insertMany(data.map(function(l){ return {...l, schoolId, _id: undefined}; }));
+    }
+    else if (col === 'levies') {
+      await StudentLevy.deleteMany({ schoolId });
+      if (data.length) await StudentLevy.insertMany(data.map(function(l){ return {...l, schoolId, _id: undefined}; }));
+    }
+    else if (col === 'levypayments') {
+      await LevyPayment.deleteMany({ schoolId });
+      if (data.length) await LevyPayment.insertMany(data.map(function(l){ return {...l, schoolId, _id: undefined}; }));
+    }
+
+    res.json({ success: true, collection: col, count: Array.isArray(data) ? data.length : 1 });
+  } catch(e) {
+    console.error('Sync error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
