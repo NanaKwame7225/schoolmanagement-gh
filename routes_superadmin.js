@@ -137,4 +137,28 @@ router.post('/schools/:slug/extend', requireSuperAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Reset/create school admin user
+router.post('/schools/:slug/reset-user', requireSuperAdmin, async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const { User } = require('./models_index');
+    const school = await School.findOne({ slug: req.params.slug });
+    if (!school) return res.status(404).json({ error: 'School not found' });
+    const { username, password, displayName, role } = req.body;
+    const hash = await bcrypt.hash(password, 10);
+    // Delete existing user with same username for this school
+    await User.deleteOne({ schoolId: school._id, username: username.toUpperCase() });
+    // Create fresh user
+    const user = await User.create({
+      schoolId: school._id,
+      username: username.toUpperCase(),
+      password: hash,
+      displayName: displayName || username,
+      role: role || 'master',
+      active: true
+    });
+    res.json({ success: true, message: 'User ' + username + ' reset successfully for ' + school.name });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
