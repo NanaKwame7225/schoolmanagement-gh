@@ -137,6 +137,68 @@ router.post('/schools/:slug/extend', requireSuperAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Self-registration — public endpoint, no auth required
+router.post('/register', async (req, res) => {
+  try {
+    const { schoolName, contactName, phone, email, plan } = req.body;
+    if (!schoolName || !contactName || !phone) return res.status(400).json({ error: 'School name, contact name and phone are required' });
+    // Generate a slug from the school name
+    const slug = schoolName.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,20) + '-' + Date.now().toString().slice(-4);
+    // Check if pending registration already exists
+    const existing = await School.findOne({ slug: { $regex: slug.split('-').slice(0,-1).join('-') } });
+    // Save as inactive school pending approval
+    const school = await School.create({
+      name: schoolName,
+      slug,
+      active: false,
+      plan: plan || 'trial',
+      planExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      phone,
+      email: email || '',
+      pendingApproval: true,
+      contactName,
+      createdAt: new Date()
+    });
+    res.json({ success: true, message: 'Registration received. We will contact you within 24 hours.', slug });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Get pending registrations
+router.get('/registrations/pending', requireSuperAdmin, async (req, res) => {
+  try {
+    const pending = await School.find({ pendingApproval: true, active: false }).sort({ createdAt: -1 });
+    res.json(pending);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Approve registration
+router.post('/registrations/:slug/approve', requireSuperAdmin, async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const { User } = require('./models_index');
+    const { password, days } = req.body;
+    const school = await School.findOne({ slug: req.params.slug });
+    if (!school) return res.status(404).json({ error: 'School not found' });
+    school.active = true;
+    school.pendingApproval = false;
+    school.planExpiry = new Date(Date.now() + (days || 30) * 24 * 60 * 60 * 1000);
+    await school.save();
+    // Create admin user
+    const hash = await bcrypt.hash(password || 'SCHOOL2025', 10);
+    await User.deleteOne({ schoolId: school._id, username: 'ADMIN' });
+    await User.create({ schoolId: school._id, username: 'ADMIN', password: hash, displayName: 'Admin', role: 'master', active: true });
+    res.json({ success: true, message: school.name + ' approved. Login: ADMIN / ' + (password || 'SCHOOL2025') });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Reject registration
+router.delete('/registrations/:slug', requireSuperAdmin, async (req, res) => {
+  try {
+    await School.deleteOne({ slug: req.params.slug, pendingApproval: true });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Reset/create school admin user
 router.post('/schools/:slug/reset-user', requireSuperAdmin, async (req, res) => {
   try {
