@@ -300,7 +300,7 @@ async function sendSMSReminder(phone, schoolName, daysLeft) {
   if (!apiKey) { console.log('[SMS REMINDER] No platform Mnotify key set in env. Skipping SMS.'); return false; }
   try {
     const msg = `Dear ${schoolName}, your SchoolManagement GH subscription expires in ${daysLeft} day${daysLeft!==1?'s':''}. Please make payment to continue uninterrupted access. Call 0538350574 to renew.`;
-    const url = `https://apps.mnotify.net/smsapi?key=${apiKey}&to=${phone}&msg=${encodeURIComponent(msg)}&sender_id=SchMgtGH`;
+    const url = `https://apps.mnotify.net/smsapi?key=${apiKey}&to=${phone}&msg=${encodeURIComponent(msg)}&sender_id=NkaySolutions`;
     const https = require('https');
     await new Promise((resolve) => { https.get(url, resolve).on('error', resolve); });
     return true;
