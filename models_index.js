@@ -3,18 +3,42 @@ const { Schema } = mongoose;
 
 // ── School (tenant) ───────────────────────────────────────────
 const SchoolSchema = new Schema({
-  slug:         { type: String, required: true, unique: true, lowercase: true, trim: true }, // e.g. "novelty"
-  name:         { type: String, required: true },
-  address:      { type: String, default: '' },
-  phone:        { type: String, default: '' },
-  email:        { type: String, default: '' },
-  logo:         { type: String, default: '' },
-  active:       { type: Boolean, default: true },
-  plan:         { type: String, enum: ['trial','starter','growth','premium'], default: 'trial' },
-  planExpiry:   { type: Date, default: () => new Date(Date.now() + 30*24*60*60*1000) }, // 30 day trial
-  trialUsed:    { type: Boolean, default: false },
-  mnotifyKey:   { type: String, default: '' },
-  mnotifySender:{ type: String, default: 'SMS' },
+  slug:              { type: String, required: true, unique: true, lowercase: true, trim: true },
+  name:              { type: String, required: true },
+  address:           { type: String, default: '' },
+  phone:             { type: String, default: '' },
+  email:             { type: String, default: '' },
+  logo:              { type: String, default: '' },
+  active:            { type: Boolean, default: true },
+  plan:              { type: String, enum: ['trial','starter','growth','premium'], default: 'trial' },
+  planExpiry:        { type: Date, default: () => new Date(Date.now() + 30*24*60*60*1000) },
+  trialUsed:         { type: Boolean, default: false },
+  freeTrialUsed:     { type: Boolean, default: false },     // one free trial per school ever
+  mnotifyKey:        { type: String, default: '' },
+  mnotifySender:     { type: String, default: 'SMS' },
+  // Self-registration fields
+  pendingApproval:   { type: Boolean, default: false },
+  contactName:       { type: String, default: '' },
+  role:              { type: String, default: '' },          // proprietor, headmaster etc.
+  location:          { type: String, default: '' },
+  studentCount:      { type: String, default: '' },
+  registeredAt:      { type: Date },
+  approvedAt:        { type: Date },
+  // Subscription lifecycle
+  subscriptionStatus:{ type: String, enum: ['active','expired','suspended','pending'], default: 'active' },
+  reminderSent:      { type: Boolean, default: false },      // 7-day expiry reminder sent
+  reminderSentAt:    { type: Date },
+  suspendedAt:       { type: Date },
+  suspendReason:     { type: String, default: '' },
+  // Subscription log
+  subscriptionLog:   [{ 
+    event:     { type: String },  // 'registered','approved','renewed','expired','suspended','reminder_sent'
+    plan:      { type: String },
+    amount:    { type: Number, default: 0 },
+    notes:     { type: String, default: '' },
+    by:        { type: String, default: 'system' },
+    at:        { type: Date, default: Date.now }
+  }],
 }, { timestamps: true });
 
 // ── Platform Super Admin ──────────────────────────────────────
