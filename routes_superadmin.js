@@ -142,62 +142,73 @@ router.post('/register', async (req, res) => {
   try {
     const { schoolName, contactName, phone, email, plan, role, location, studentCount } = req.body;
     if (!schoolName || !contactName || !phone) return res.status(400).json({ error: 'School name, contact name and phone are required' });
-    const slug = schoolName.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,20) + '-' + Date.now().toString().slice(-4);
+
+    // Generate unique slug
+    const baseSlug = schoolName.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,20);
+    const slug = baseSlug + '-' + Date.now().toString().slice(-4);
+
+    // Auto-generate a secure password
+    const rawPassword = 'SCH' + Math.random().toString(36).slice(2,6).toUpperCase() + Math.floor(100+Math.random()*900);
+
+    // Create school — active immediately, free trial starts now
     const school = await School.create({
       name: schoolName, slug,
-      active: false,
-      plan: plan || 'trial',
-      planExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      active: true,
+      plan: 'trial',
+      planExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),  // 30-day free trial
       phone, email: email || '',
-      pendingApproval: true,
+      pendingApproval: false,
+      freeTrialUsed: true,
       contactName, role: role || '', location: location || '', studentCount: studentCount || '',
       registeredAt: new Date(),
-      subscriptionStatus: 'pending',
-      subscriptionLog: [{ event: 'registered', plan: plan||'trial', notes: 'Self-registered via web form', by: 'self', at: new Date() }]
+      approvedAt: new Date(),
+      subscriptionStatus: 'active',
+      reminderSent: false,
+      subscriptionLog: [
+        { event: 'registered', plan: 'trial', notes: 'Self-registered via web form', by: 'self', at: new Date() },
+        { event: 'approved',   plan: 'trial', notes: 'Auto-activated — 30-day free trial started', by: 'system', at: new Date() }
+      ]
     });
-    // Notify super admin via console log (SMS to super admin number can be wired here)
-    console.log(`[NEW REGISTRATION] ${schoolName} | Contact: ${contactName} | Phone: ${phone} | Slug: ${slug}`);
-    res.json({ success: true, message: 'Registration received. We will contact you within 24 hours.', slug });
+
+    // Create ADMIN user immediately
+    const hash = await bcrypt.hash(rawPassword, 10);
+    await User.create({ schoolId: school._id, username: 'ADMIN', password: hash, displayName: contactName || 'Admin', role: 'master', active: true });
+
+    // SMS login credentials to the school's phone
+    const loginUrl = 'https://nanakwame7225.github.io/SchoolFees/?school=' + slug;
+    const welcomeMsg = `Welcome to SchoolManagement GH! ${schoolName} is now live.
+Login URL: ${loginUrl}
+Username: ADMIN
+Password: ${rawPassword}
+Your 30-day free trial starts today. Renew before expiry to keep access.
+Support: 0538350574`;
+    await sendPlatformSMS(phone, welcomeMsg);
+
+    // Notify super admin via SMS
+    const adminPhone = process.env.ADMIN_PHONE || '0538350574';
+    const adminMsg = `[New Registration] ${schoolName} | Contact: ${contactName} | Phone: ${phone} | Slug: ${slug} | Auto-activated.`;
+    await sendPlatformSMS(adminPhone, adminMsg);
+
+    console.log(`[AUTO-ACTIVATED] ${schoolName} | Slug: ${slug} | Phone: ${phone} | Password: ${rawPassword}`);
+    res.json({ success: true, message: 'Your school is live! Login details have been sent to ' + phone, slug, loginUrl });
+
+  } catch(e) {
+    if (e.code === 11000) return res.status(409).json({ error: 'A school with that name already exists. Please contact support.' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get all self-registered schools (for super admin log view)
+router.get('/registrations/all', requireSuperAdmin, async (req, res) => {
+  try {
+    const schools = await School.find({ registeredAt: { $exists: true } }).sort({ registeredAt: -1 }).limit(100);
+    res.json(schools);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Get pending registrations
+// Keep pending endpoint for backward compatibility — returns empty now
 router.get('/registrations/pending', requireSuperAdmin, async (req, res) => {
-  try {
-    const pending = await School.find({ pendingApproval: true, active: false }).sort({ createdAt: -1 });
-    res.json(pending);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// Approve registration
-router.post('/registrations/:slug/approve', requireSuperAdmin, async (req, res) => {
-  try {
-    const { User } = require('./models_index');
-    const { password, days } = req.body;
-    const school = await School.findOne({ slug: req.params.slug });
-    if (!school) return res.status(404).json({ error: 'School not found' });
-    school.active = true;
-    school.pendingApproval = false;
-    school.freeTrialUsed = true;  // mark free trial consumed
-    school.subscriptionStatus = 'active';
-    school.approvedAt = new Date();
-    school.planExpiry = new Date(Date.now() + (days || 30) * 24 * 60 * 60 * 1000);
-    school.reminderSent = false;
-    school.subscriptionLog.push({ event: 'approved', plan: school.plan, notes: `Trial approved for ${days||30} days`, by: 'superadmin', at: new Date() });
-    await school.save();
-    const hash = await bcrypt.hash(password || 'SCHOOL2025', 10);
-    await User.deleteOne({ schoolId: school._id, username: 'ADMIN' });
-    await User.create({ schoolId: school._id, username: 'ADMIN', password: hash, displayName: 'Admin', role: 'master', active: true });
-    res.json({ success: true, message: school.name + ' approved. Login: ADMIN / ' + (password || 'SCHOOL2025') });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// Reject registration
-router.delete('/registrations/:slug', requireSuperAdmin, async (req, res) => {
-  try {
-    await School.deleteOne({ slug: req.params.slug, pendingApproval: true });
-    res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  res.json([]);
 });
 
 // Reset/create school admin user
@@ -293,18 +304,28 @@ router.post('/scheduler/run', requireSuperAdmin, async (req, res) => {
 });
 
 // ── Scheduler logic (also auto-runs on server startup every 6 hours) ─
-async function sendSMSReminder(phone, schoolName, daysLeft) {
+// ── Central SMS sender (uses platform Mnotify key) ────────────────────
+async function sendPlatformSMS(phone, message) {
   if (!phone) return false;
-  // Use platform Mnotify key from env or hardcoded fallback
-  const apiKey = process.env.MNOTIFY_KEY || '';
-  if (!apiKey) { console.log('[SMS REMINDER] No platform Mnotify key set in env. Skipping SMS.'); return false; }
+  const apiKey = process.env.MNOTIFY_KEY || 's6mhqRtYmKUm4Pf3Go6garMmT';
   try {
-    const msg = `Dear ${schoolName}, your SchoolManagement GH subscription expires in ${daysLeft} day${daysLeft!==1?'s':''}. Please make payment to continue uninterrupted access. Call 0538350574 to renew.`;
-    const url = `https://apps.mnotify.net/smsapi?key=${apiKey}&to=${phone}&msg=${encodeURIComponent(msg)}&sender_id=NkaySolutions`;
+    const clean = phone.replace(/\s+/g, '').replace(/^\+233/, '0').replace(/^233/, '0');
+    const url = 'https://apps.mnotify.net/smsapi?key=' + apiKey
+      + '&to=' + encodeURIComponent(clean)
+      + '&msg=' + encodeURIComponent(message)
+      + '&sender_id=NkaySolutions';
     const https = require('https');
-    await new Promise((resolve) => { https.get(url, resolve).on('error', resolve); });
+    await new Promise(function(resolve){ https.get(url, resolve).on('error', resolve); });
+    console.log('[SMS] Sent to ' + clean);
     return true;
-  } catch(e) { console.error('[SMS REMINDER] Error:', e.message); return false; }
+  } catch(e) { console.error('[SMS] Error:', e.message); return false; }
+}
+
+async function sendSMSReminder(phone, schoolName, daysLeft) {
+  const msg = 'Dear ' + schoolName + ', your SchoolManagement GH subscription expires in '
+    + daysLeft + ' day' + (daysLeft!==1?'s':'') + '. Please make payment to continue '
+    + 'uninterrupted access. Call 0538350574 to renew. — NkaySolutions';
+  return sendPlatformSMS(phone, msg);
 }
 
 async function runSubscriptionScheduler() {
